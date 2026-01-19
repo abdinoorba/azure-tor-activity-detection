@@ -1,0 +1,26 @@
+// Detect Azure control-plane activity originating from Tor exit nodes
+// Data sources:
+//   - AzureActivity
+//   - Microsoft Sentinel Watchlist: TorNetworkIps
+
+let TorExitNodeIPs =
+    GetWatchlist('TorNetworkIps')
+    | project TorExitIP = ExitPointsTor;
+
+AzureActivity
+| where isnotempty(CallerIpAddress)
+| extend
+    InitiatingIdentity = Caller,
+    TargetResourceName = tostring(parse_json(Properties).Resource)
+| join kind=inner TorExitNodeIPs
+    on $left.CallerIpAddress == $right.TorExitIP
+| project
+    TimeGenerated,
+    OperationNameValue,
+    ActivityStatusValue,
+    SubscriptionId,
+    InitiatingIdentity,
+    CallerIpAddress,
+    TargetResourceName,
+    ResourceGroup
+| order by TimeGenerated desc
